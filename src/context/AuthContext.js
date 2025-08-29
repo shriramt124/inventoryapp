@@ -29,6 +29,7 @@ export const AuthProvider = ({ children }) => {
             setCurrentUser({
               uid: user.uid,
               email: user.email,
+              role: 'user', // Default role
             });
           }
         } catch (error) {

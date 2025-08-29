@@ -3,13 +3,34 @@ import { StyleSheet, Text, View, TouchableOpacity, Alert, ActivityIndicator } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { subscribeToProductById } from '../services/firebaseService';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 const ProductDetailScreen = ({ route, navigation }) => {
   const { productId } = route.params;
   const [product, setProduct] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
 
   useEffect(() => {
+    // Get current user info
+    const unsubscribeAuth = auth().onAuthStateChanged(async (user) => {
+      if (user) {
+        try {
+          const userDoc = await firestore().collection('users').doc(user.uid).get();
+          if (userDoc.exists()) {
+            setCurrentUser({
+              uid: user.uid,
+              email: user.email,
+              ...userDoc.data(),
+            });
+          }
+        } catch (error) {
+          console.error('Error fetching user data:', error);
+        }
+      }
+    });
+
     // Set up real-time listener for product details
     const unsubscribe = subscribeToProductById(productId, (productData) => {
       setProduct(productData);
@@ -18,9 +39,12 @@ const ProductDetailScreen = ({ route, navigation }) => {
         title: productData.name,
       });
     });
-    
+
     // Clean up listener on component unmount
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      unsubscribe();
+    };
   }, [productId, navigation]);
 
 
@@ -45,45 +69,57 @@ const ProductDetailScreen = ({ route, navigation }) => {
             <Icon name="inventory" size={24} color="#4a80f5" />
             <Text style={styles.title}>{product.name}</Text>
           </View>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>MRP:</Text>
             <Text style={styles.detailValue}>₹{product.mrp}</Text>
           </View>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Current Stock:</Text>
             <Text style={styles.detailValue}>{product.stock} {product.unit}</Text>
           </View>
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Cartons:</Text>
             <Text style={styles.detailValue}>{product.cartons || 0}</Text>
           </View>
-          
+
           {product.description && (
             <View style={styles.descriptionContainer}>
               <Text style={styles.descriptionLabel}>Description:</Text>
               <Text style={styles.descriptionText}>{product.description}</Text>
             </View>
           )}
-          
+
           <View style={styles.actionsContainer}>
-            <TouchableOpacity 
-              style={[styles.actionButton, styles.updateButton]}
-              onPress={() => navigation.navigate('StockUpdate', { productId: product.id, productName: product.name })}
-            >
-              <Icon name="edit" size={20} color="#fff" style={styles.actionIcon} />
-              <Text style={styles.actionText}>Update Stock</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              style={[styles.actionButton, { backgroundColor: '#4CAF50', marginLeft: 10 }]}
-              onPress={() => navigation.navigate('StockHistory', { productId: product.id, productName: product.name })}
-            >
-              <Icon name="history" size={20} color="#fff" style={styles.actionIcon} />
-              <Text style={styles.actionText}>View History</Text>
-            </TouchableOpacity>
+            {currentUser?.role === 'admin' ? (
+              <>
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.updateButton]}
+                  onPress={() => navigation.navigate('StockUpdate', { productId: product.id, productName: product.name })}
+                >
+                  <Icon name="edit" size={20} color="#fff" style={styles.actionIcon} />
+                  <Text style={styles.actionText}>Update Stock</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionButton, { backgroundColor: '#4CAF50', marginLeft: 10 }]}
+                  onPress={() => navigation.navigate('StockHistory', { productId: product.id, productName: product.name })}
+                >
+                  <Icon name="history" size={20} color="#fff" style={styles.actionIcon} />
+                  <Text style={styles.actionText}>View History</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <TouchableOpacity
+                style={[styles.actionButton, { backgroundColor: '#4CAF50' }]}
+                onPress={() => navigation.navigate('StockHistory', { productId: product.id, productName: product.name })}
+              >
+                <Icon name="history" size={20} color="#fff" style={styles.actionIcon} />
+                <Text style={styles.actionText}>View History</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>

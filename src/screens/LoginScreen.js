@@ -59,11 +59,16 @@ const LoginScreen = ({ navigation }) => {
       const userDoc = await firestore().collection('users').doc(user.uid).get();
       
       if (!userDoc.exists) {
+        // Check if this is the first user (make them admin)
+        const usersSnapshot = await firestore().collection('users').get();
+        const isFirstUser = usersSnapshot.empty;
+        
         await firestore().collection('users').doc(user.uid).set({
           name: user.displayName || '',
           email: user.email,
           photoURL: user.photoURL || '',
           provider: 'google',
+          role: isFirstUser ? 'admin' : 'user', // First user becomes admin
           createdAt: new Date().toISOString(),
         });
       }

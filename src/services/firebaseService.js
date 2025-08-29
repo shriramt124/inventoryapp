@@ -13,11 +13,71 @@ export const registerUser = async (email, password, userData) => {
       uid: user.uid,
       email: user.email,
       displayName: userData.name || '',
+      role: userData.role || 'user', // Default role is 'user'
       ...userData,
       createdAt: new Date().toISOString(),
     });
     
     return { success: true, user };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Admin function to create users
+export const createUserByAdmin = async (email, password, userData) => {
+  try {
+    // This would typically be done through Firebase Admin SDK on server
+    // For now, we'll use client SDK but note this has limitations
+    const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+    const user = userCredential.user;
+    
+    // Add user details to Firestore
+    await firestore().collection('users').doc(user.uid).set({
+      uid: user.uid,
+      email: user.email,
+      displayName: userData.name || '',
+      role: userData.role || 'user',
+      createdBy: userData.createdBy,
+      ...userData,
+      createdAt: new Date().toISOString(),
+    });
+    
+    // Sign out the newly created user to keep admin logged in
+    await auth().signOut();
+    
+    return { success: true, user };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Check if current user is admin
+export const checkUserRole = async (userId) => {
+  try {
+    const userDoc = await firestore().collection('users').doc(userId).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data();
+      return { success: true, role: userData.role || 'user' };
+    }
+    return { success: false, error: 'User not found' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
+// Get all users (admin only)
+export const getAllUsers = async () => {
+  try {
+    const querySnapshot = await firestore().collection('users').get();
+    const users = [];
+    querySnapshot.forEach((doc) => {
+      users.push({
+        id: doc.id,
+        ...doc.data(),
+      });
+    });
+    return { success: true, users };
   } catch (error) {
     return { success: false, error: error.message };
   }
