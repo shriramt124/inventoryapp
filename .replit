@@ -18,3 +18,6 @@ mode = "sequential"
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx react-native start --reset-cache"
+
+[agent]
+expertMode = true
