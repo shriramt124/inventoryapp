@@ -293,6 +293,42 @@ export const subscribeToProducts = (groupId, callback) => {
   return unsubscribe;
 };
 
+// Create initial admin user
+export const createInitialAdmin = async () => {
+  try {
+    // Check if admin already exists
+    const adminQuery = await firestore()
+      .collection('users')
+      .where('email', '==', 'shriramt.124@gmail.com')
+      .get();
+    
+    if (!adminQuery.empty) {
+      return { success: true, message: 'Admin user already exists' };
+    }
+
+    // Create admin user
+    const userCredential = await auth().createUserWithEmailAndPassword(
+      'shriramt.124@gmail.com', 
+      '198118113Ram@'
+    );
+    const user = userCredential.user;
+    
+    // Add admin details to Firestore
+    await firestore().collection('users').doc(user.uid).set({
+      uid: user.uid,
+      name: 'Admin',
+      email: 'shriramt.124@gmail.com',
+      role: 'admin',
+      createdAt: new Date().toISOString(),
+      isInitialAdmin: true,
+    });
+    
+    return { success: true, message: 'Admin user created successfully' };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
 // User Services
 export const getUserById = async (userId) => {
   try {

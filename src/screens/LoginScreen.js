@@ -5,6 +5,7 @@ import auth from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import firestore from '@react-native-firebase/firestore';
 import Icon from 'react-native-vector-icons/MaterialIcons';
+import { createInitialAdmin } from '../services/firebaseService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -33,6 +34,34 @@ const LoginScreen = ({ navigation }) => {
       navigation.replace('Home');
     } catch (error) {
       Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminSetup = async () => {
+    setLoading(true);
+    try {
+      const result = await createInitialAdmin();
+      if (result.success) {
+        Alert.alert('Success', 'Admin account has been set up. You can now login with admin credentials.');
+      } else {
+        Alert.alert('Info', result.error || 'Admin account setup failed');
+      }
+    } catch (error) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAdminLogin = async () => {
+    setLoading(true);
+    try {
+      await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+      navigation.replace('Home');
+    } catch (error) {
+      Alert.alert('Error', 'Admin login failed. Make sure admin account is set up first.');
     } finally {
       setLoading(false);
     }
@@ -147,6 +176,20 @@ const LoginScreen = ({ navigation }) => {
           )}
         </TouchableOpacity>
         
+        <TouchableOpacity 
+          style={styles.adminSetupButton}
+          onPress={handleAdminSetup}
+        >
+          <Text style={styles.adminSetupText}>Setup Admin Account</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={styles.adminLoginButton}
+          onPress={handleAdminLogin}
+        >
+          <Text style={styles.adminLoginText}>Quick Admin Login</Text>
+        </TouchableOpacity>
+
         <View style={styles.registerContainer}>
           <Text style={styles.registerText}>Don't have an account? </Text>
           <TouchableOpacity onPress={() => navigation.navigate('Register')}>
@@ -247,6 +290,30 @@ const styles = StyleSheet.create({
     color: '#333',
     fontWeight: '600',
     fontSize: 16,
+  },
+  adminSetupButton: {
+    backgroundColor: '#e74c3c',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  adminSetupText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+  },
+  adminLoginButton: {
+    backgroundColor: '#f39c12',
+    borderRadius: 8,
+    padding: 12,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  adminLoginText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 
