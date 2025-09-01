@@ -296,43 +296,77 @@ export const subscribeToProducts = (groupId, callback) => {
 // Create initial admin user
 export const createInitialAdmin = async () => {
   try {
-    // Check if admin already exists
+    // Check if admin already exists in firestore
     const adminQuery = await firestore()
       .collection('users')
       .where('email', '==', 'shriramt.124@gmail.com')
       .get();
     
     if (!adminQuery.empty) {
+      console.log('Admin user already exists in Firestore');
       return { success: true, message: 'Admin user already exists' };
     }
 
-    // Create admin user with exact credentials
-    const userCredential = await auth().createUserWithEmailAndPassword(
-      'shriramt.124@gmail.com', 
-      '198118113Ram@'
-    );
-    const user = userCredential.user;
-    
-    // Add admin details to Firestore
-    await firestore().collection('users').doc(user.uid).set({
-      uid: user.uid,
-      name: 'Administrator',
-      displayName: 'Administrator',
-      email: 'shriramt.124@gmail.com',
-      role: 'admin',
-      createdAt: new Date().toISOString(),
-      isInitialAdmin: true,
-    });
-    
-    // Sign out the newly created admin to allow normal login flow
-    await auth().signOut();
-    
-    return { success: true, message: 'Admin user created successfully' };
-  } catch (error) {
-    // If user already exists in auth but not in firestore, handle it
-    if (error.code === 'auth/email-already-in-use') {
-      return { success: true, message: 'Admin user already exists in authentication' };
+    // Try to create admin user with exact credentials
+    try {
+      const userCredential = await auth().createUserWithEmailAndPassword(
+        'shriramt.124@gmail.com', 
+        '198118113Ram@'
+      );
+      const user = userCredential.user;
+      
+      // Add admin details to Firestore
+      await firestore().collection('users').doc(user.uid).set({
+        uid: user.uid,
+        name: 'Administrator',
+        displayName: 'Administrator',
+        email: 'shriramt.124@gmail.com',
+        role: 'admin',
+        createdAt: new Date().toISOString(),
+        isInitialAdmin: true,
+      });
+      
+      // Sign out the newly created admin to allow normal login flow
+      await auth().signOut();
+      
+      console.log('Admin user created successfully');
+      return { success: true, message: 'Admin user created successfully' };
+    } catch (authError) {
+      if (authError.code === 'auth/email-already-in-use') {
+        // User exists in auth but not in firestore, try to get the user and add to firestore
+        try {
+          console.log('Admin exists in auth, trying to add to Firestore');
+          // Try to sign in first to get the user
+          const signInResult = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+          const user = signInResult.user;
+          
+          // Add to firestore
+          await firestore().collection('users').doc(user.uid).set({
+            uid: user.uid,
+            name: 'Administrator',
+            displayName: 'Administrator',
+            email: 'shriramt.124@gmail.com',
+            role: 'admin',
+            createdAt: new Date().toISOString(),
+            isInitialAdmin: true,
+          });
+          
+          // Sign out
+          await auth().signOut();
+          
+          console.log('Admin user added to Firestore');
+          return { success: true, message: 'Admin user setup completed' };
+        } catch (firestoreError) {
+          console.error('Error adding admin to Firestore:', firestoreError);
+          return { success: false, error: 'Failed to setup admin in database' };
+        }
+      } else {
+        console.error('Error creating admin user:', authError);
+        return { success: false, error: authError.message };
+      }
     }
+  } catch (error) {
+    console.error('Unexpected error in createInitialAdmin:', error);
     return { success: false, error: error.message };
   }
 };

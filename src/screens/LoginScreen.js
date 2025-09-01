@@ -37,10 +37,41 @@ const LoginScreen = ({ navigation }) => {
   const handleAdminLogin = async () => {
     setLoading(true);
     try {
-      await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+      const userCredential = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+      const user = userCredential.user;
+      
+      // Check if user exists in firestore and is admin
+      const userDoc = await firestore().collection('users').doc(user.uid).get();
+      if (!userDoc.exists) {
+        // If admin doesn't exist in firestore, create the document
+        await firestore().collection('users').doc(user.uid).set({
+          uid: user.uid,
+          name: 'Administrator',
+          displayName: 'Administrator',
+          email: 'shriramt.124@gmail.com',
+          role: 'admin',
+          createdAt: new Date().toISOString(),
+          isInitialAdmin: true,
+        });
+      }
+      
       navigation.replace('Home');
     } catch (error) {
-      Alert.alert('Error', 'Admin login failed. Please check your credentials.');
+      console.error('Admin login error:', error);
+      if (error.code === 'auth/user-not-found') {
+        Alert.alert('Error', 'Admin user not found. Setting up admin account...');
+        // Try to create the admin user
+        try {
+          await createInitialAdmin();
+          Alert.alert('Success', 'Admin account created. Please try logging in again.');
+        } catch (setupError) {
+          Alert.alert('Error', 'Failed to setup admin account. Please contact support.');
+        }
+      } else if (error.code === 'auth/wrong-password') {
+        Alert.alert('Error', 'Invalid admin password.');
+      } else {
+        Alert.alert('Error', 'Admin login failed: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -148,8 +179,28 @@ const LoginScreen = ({ navigation }) => {
         {loginType === 'admin' ? (
           <View style={styles.adminLoginContainer}>
             <Text style={styles.adminLoginText}>
-              Admin credentials are pre-configured. Click below to login as administrator.
+              Admin Login - Credentials are pre-filled
             </Text>
+            
+            <TextInput
+              style={[styles.input, styles.adminInput]}
+              placeholder="Admin Email"
+              placeholderTextColor="#999"
+              value="shriramt.124@gmail.com"
+              editable={false}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            
+            <TextInput
+              style={[styles.input, styles.adminInput]}
+              placeholder="Admin Password"
+              placeholderTextColor="#999"
+              value="198118113Ram@"
+              editable={false}
+              secureTextEntry
+            />
+            
             <TouchableOpacity 
               style={styles.adminButton}
               onPress={handleAdminLogin}
@@ -164,6 +215,10 @@ const LoginScreen = ({ navigation }) => {
                 </>
               )}
             </TouchableOpacity>
+            
+            <Text style={styles.adminNoteText}>
+              Note: These are the default admin credentials
+            </Text>
           </View>
         ) : (
           <View style={styles.userLoginContainer}>
@@ -290,8 +345,20 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
     marginBottom: 20,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  adminInput: {
+    backgroundColor: '#f8f9fa',
+    color: '#666',
+    fontWeight: '500',
+  },
+  adminNoteText: {
+    textAlign: 'center',
+    color: '#999',
+    marginTop: 15,
+    fontSize: 12,
+    fontStyle: 'italic',
   },
   adminButton: {
     backgroundColor: '#e74c3c',
