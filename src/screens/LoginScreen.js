@@ -37,13 +37,12 @@ const LoginScreen = ({ navigation }) => {
   const handleAdminLogin = async () => {
     setLoading(true);
     try {
-      const userCredential = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
-      const user = userCredential.user;
-      
-      // Check if user exists in firestore and is admin
-      const userDoc = await firestore().collection('users').doc(user.uid).get();
-      if (!userDoc.exists) {
-        // If admin doesn't exist in firestore, create the document
+      // First, try to create the admin user if it doesn't exist
+      try {
+        const userCredential = await auth().createUserWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+        const user = userCredential.user;
+        
+        // Add admin details to Firestore
         await firestore().collection('users').doc(user.uid).set({
           uid: user.uid,
           name: 'Administrator',
@@ -53,40 +52,53 @@ const LoginScreen = ({ navigation }) => {
           createdAt: new Date().toISOString(),
           isInitialAdmin: true,
         });
-      }
-      
-      navigation.replace('Home');
-    } catch (error) {
-      console.error('Admin login error:', error);
-      if (error.code === 'auth/user-not-found') {
-        // Try to create the admin user first
-        try {
-          const userCredential = await auth().createUserWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
-          const user = userCredential.user;
-          
-          // Add admin details to Firestore
-          await firestore().collection('users').doc(user.uid).set({
-            uid: user.uid,
-            name: 'Administrator',
-            displayName: 'Administrator',
-            email: 'shriramt.124@gmail.com',
-            role: 'admin',
-            createdAt: new Date().toISOString(),
-            isInitialAdmin: true,
-          });
-          
-          Alert.alert('Success', 'Admin account created and logged in successfully!');
-          navigation.replace('Home');
-        } catch (createError) {
+        
+        Alert.alert('Success', 'Admin account created and logged in successfully!');
+        navigation.replace('Home');
+        return;
+      } catch (createError) {
+        // If user already exists, try to sign in
+        if (createError.code === 'auth/email-already-in-use') {
+          try {
+            const userCredential = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+            const user = userCredential.user;
+            
+            // Check if user exists in firestore and is admin
+            const userDoc = await firestore().collection('users').doc(user.uid).get();
+            if (!userDoc.exists) {
+              // If admin doesn't exist in firestore, create the document
+              await firestore().collection('users').doc(user.uid).set({
+                uid: user.uid,
+                name: 'Administrator',
+                displayName: 'Administrator',
+                email: 'shriramt.124@gmail.com',
+                role: 'admin',
+                createdAt: new Date().toISOString(),
+                isInitialAdmin: true,
+              });
+            }
+            
+            navigation.replace('Home');
+          } catch (signInError) {
+            console.error('Admin sign in error:', signInError);
+            if (signInError.code === 'auth/wrong-password') {
+              Alert.alert('Error', 'Invalid admin password. Please check your credentials.');
+            } else if (signInError.code === 'auth/invalid-credential') {
+              Alert.alert('Error', 'Invalid credentials. Please verify the email and password are correct.');
+            } else if (signInError.code === 'auth/user-not-found') {
+              Alert.alert('Error', 'Admin user not found. Please contact support.');
+            } else {
+              Alert.alert('Error', 'Admin login failed: ' + signInError.message);
+            }
+          }
+        } else {
+          console.error('Admin creation error:', createError);
           Alert.alert('Error', 'Failed to create admin account: ' + createError.message);
         }
-      } else if (error.code === 'auth/wrong-password') {
-        Alert.alert('Error', 'Invalid admin password.');
-      } else if (error.code === 'auth/invalid-email') {
-        Alert.alert('Error', 'Invalid email format.');
-      } else {
-        Alert.alert('Error', 'Admin login failed: ' + error.message);
       }
+    } catch (error) {
+      console.error('Unexpected admin login error:', error);
+      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
     } finally {
       setLoading(false);
     }
