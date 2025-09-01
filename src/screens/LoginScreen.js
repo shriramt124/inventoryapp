@@ -6,7 +6,7 @@ import auth from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import firestore from '@react-native-firebase/firestore';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import { createInitialAdmin } from '../services/firebaseService';
+import { createInitialAdmin, loginUser } from '../services/firebaseService';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
@@ -37,12 +37,20 @@ const LoginScreen = ({ navigation }) => {
   const handleAdminLogin = async () => {
     setLoading(true);
     try {
-      // First, try to create the admin user if it doesn't exist
-      try {
-        const userCredential = await auth().createUserWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
-        const user = userCredential.user;
-        
-        // Add admin details to Firestore
+      const userCredential = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+      const user = userCredential.user;
+      
+      // Verify user is admin in Firestore
+      const userDoc = await firestore().collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (userData.role !== 'admin') {
+          await auth().signOut();
+          Alert.alert('Error', 'User does not have admin privileges');
+          return;
+        }
+      } else {
+        // Create admin document if it doesn't exist
         await firestore().collection('users').doc(user.uid).set({
           uid: user.uid,
           name: 'Administrator',
@@ -52,53 +60,19 @@ const LoginScreen = ({ navigation }) => {
           createdAt: new Date().toISOString(),
           isInitialAdmin: true,
         });
-        
-        Alert.alert('Success', 'Admin account created and logged in successfully!');
-        navigation.replace('Home');
-        return;
-      } catch (createError) {
-        // If user already exists, try to sign in
-        if (createError.code === 'auth/email-already-in-use') {
-          try {
-            const userCredential = await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
-            const user = userCredential.user;
-            
-            // Check if user exists in firestore and is admin
-            const userDoc = await firestore().collection('users').doc(user.uid).get();
-            if (!userDoc.exists) {
-              // If admin doesn't exist in firestore, create the document
-              await firestore().collection('users').doc(user.uid).set({
-                uid: user.uid,
-                name: 'Administrator',
-                displayName: 'Administrator',
-                email: 'shriramt.124@gmail.com',
-                role: 'admin',
-                createdAt: new Date().toISOString(),
-                isInitialAdmin: true,
-              });
-            }
-            
-            navigation.replace('Home');
-          } catch (signInError) {
-            console.error('Admin sign in error:', signInError);
-            if (signInError.code === 'auth/wrong-password') {
-              Alert.alert('Error', 'Invalid admin password. Please check your credentials.');
-            } else if (signInError.code === 'auth/invalid-credential') {
-              Alert.alert('Error', 'Invalid credentials. Please verify the email and password are correct.');
-            } else if (signInError.code === 'auth/user-not-found') {
-              Alert.alert('Error', 'Admin user not found. Please contact support.');
-            } else {
-              Alert.alert('Error', 'Admin login failed: ' + signInError.message);
-            }
-          }
-        } else {
-          console.error('Admin creation error:', createError);
-          Alert.alert('Error', 'Failed to create admin account: ' + createError.message);
-        }
       }
+      
+      Alert.alert('Success', 'Admin login successful!');
+      navigation.replace('Home');
     } catch (error) {
-      console.error('Unexpected admin login error:', error);
-      Alert.alert('Error', 'An unexpected error occurred. Please try again.');
+      console.error('Admin login error:', error);
+      if (error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+        Alert.alert('Error', 'Invalid admin credentials');
+      } else if (error.code === 'auth/user-not-found') {
+        Alert.alert('Error', 'Admin user not found. Please contact support.');
+      } else {
+        Alert.alert('Error', 'Admin login failed: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -115,7 +89,7 @@ const LoginScreen = ({ navigation }) => {
       const userCredential = await auth().signInWithEmailAndPassword(email, password);
       const user = userCredential.user;
       
-      // Check if user exists in firestore and is not admin
+      // Check if user exists in firestore
       const userDoc = await firestore().collection('users').doc(user.uid).get();
       if (userDoc.exists) {
         const userData = userDoc.data();
@@ -206,27 +180,8 @@ const LoginScreen = ({ navigation }) => {
         {loginType === 'admin' ? (
           <View style={styles.adminLoginContainer}>
             <Text style={styles.adminLoginText}>
-              Admin Login - Credentials are pre-filled
+              Admin Login - Use predefined credentials
             </Text>
-            
-            <TextInput
-              style={[styles.input, styles.adminInput]}
-              placeholder="Admin Email"
-              placeholderTextColor="#999"
-              value="shriramt.124@gmail.com"
-              editable={false}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-            
-            <TextInput
-              style={[styles.input, styles.adminInput]}
-              placeholder="Admin Password"
-              placeholderTextColor="#999"
-              value="198118113Ram@"
-              editable={false}
-              secureTextEntry
-            />
             
             <TouchableOpacity 
               style={styles.adminButton}
@@ -244,7 +199,7 @@ const LoginScreen = ({ navigation }) => {
             </TouchableOpacity>
             
             <Text style={styles.adminNoteText}>
-              Note: These are the default admin credentials
+              Email: shriramt.124@gmail.com{'\n'}Password: 198118113Ram@
             </Text>
           </View>
         ) : (
@@ -374,11 +329,6 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 16,
     fontWeight: '600',
-  },
-  adminInput: {
-    backgroundColor: '#f8f9fa',
-    color: '#666',
-    fontWeight: '500',
   },
   adminNoteText: {
     textAlign: 'center',

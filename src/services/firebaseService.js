@@ -1,3 +1,4 @@
+
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
@@ -27,6 +28,21 @@ export const registerUser = async (email, password, userData) => {
 // Admin function to create users
 export const createUserByAdmin = async (email, password, userData) => {
   try {
+    // Get current user to verify admin role
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    // Verify current user is admin
+    const adminDoc = await firestore().collection('users').doc(currentUser.uid).get();
+    if (!adminDoc.exists || adminDoc.data().role !== 'admin') {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
+    // Store admin credentials for re-login
+    const adminEmail = currentUser.email;
+    
     // This would typically be done through Firebase Admin SDK on server
     // For now, we'll use client SDK but note this has limitations
     const userCredential = await auth().createUserWithEmailAndPassword(email, password);
@@ -66,9 +82,42 @@ export const checkUserRole = async (userId) => {
   }
 };
 
+// Verify admin role for current user
+export const verifyAdminRole = async () => {
+  try {
+    const currentUser = auth().currentUser;
+    if (!currentUser) {
+      return { success: false, error: 'Not authenticated' };
+    }
+
+    const userDoc = await firestore().collection('users').doc(currentUser.uid).get();
+    if (!userDoc.exists) {
+      return { success: false, error: 'User document not found' };
+    }
+
+    const userData = userDoc.data();
+    const isAdmin = userData.role === 'admin';
+    
+    return { 
+      success: true, 
+      isAdmin, 
+      role: userData.role,
+      user: userData 
+    };
+  } catch (error) {
+    return { success: false, error: error.message };
+  }
+};
+
 // Get all users (admin only)
 export const getAllUsers = async () => {
   try {
+    // Verify admin role first
+    const adminCheck = await verifyAdminRole();
+    if (!adminCheck.success || !adminCheck.isAdmin) {
+      return { success: false, error: 'Insufficient permissions' };
+    }
+
     const querySnapshot = await firestore().collection('users').get();
     const users = [];
     querySnapshot.forEach((doc) => {
@@ -196,8 +245,6 @@ export const getProductById = async (productId) => {
     return { success: false, error: error.message };
   }
 };
-
-// runTransaction is now imported at the top of the file
 
 export const updateProductStock = async (productId, newStock, newCartons, userId, changeReason = '') => {
   try {
