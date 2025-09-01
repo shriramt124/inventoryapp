@@ -59,16 +59,31 @@ const LoginScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Admin login error:', error);
       if (error.code === 'auth/user-not-found') {
-        Alert.alert('Error', 'Admin user not found. Setting up admin account...');
-        // Try to create the admin user
+        // Try to create the admin user first
         try {
-          await createInitialAdmin();
-          Alert.alert('Success', 'Admin account created. Please try logging in again.');
-        } catch (setupError) {
-          Alert.alert('Error', 'Failed to setup admin account. Please contact support.');
+          const userCredential = await auth().createUserWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
+          const user = userCredential.user;
+          
+          // Add admin details to Firestore
+          await firestore().collection('users').doc(user.uid).set({
+            uid: user.uid,
+            name: 'Administrator',
+            displayName: 'Administrator',
+            email: 'shriramt.124@gmail.com',
+            role: 'admin',
+            createdAt: new Date().toISOString(),
+            isInitialAdmin: true,
+          });
+          
+          Alert.alert('Success', 'Admin account created and logged in successfully!');
+          navigation.replace('Home');
+        } catch (createError) {
+          Alert.alert('Error', 'Failed to create admin account: ' + createError.message);
         }
       } else if (error.code === 'auth/wrong-password') {
         Alert.alert('Error', 'Invalid admin password.');
+      } else if (error.code === 'auth/invalid-email') {
+        Alert.alert('Error', 'Invalid email format.');
       } else {
         Alert.alert('Error', 'Admin login failed: ' + error.message);
       }
