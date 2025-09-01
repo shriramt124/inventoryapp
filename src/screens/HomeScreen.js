@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, FlatList, Alert, Dimensions } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, FlatList, Alert, Dimensions, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
@@ -13,6 +13,8 @@ const HomeScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+
+  const isAdmin = currentUser?.role === 'admin';
 
   useEffect(() => {
     // Get current user info
@@ -30,6 +32,8 @@ const HomeScreen = ({ navigation }) => {
         } catch (error) {
           console.error('Error fetching user data:', error);
         }
+      } else {
+        setCurrentUser(null);
       }
     });
 
@@ -84,6 +88,18 @@ const HomeScreen = ({ navigation }) => {
         }
       ]
     );
+  };
+
+  const navigateToProductGroups = () => {
+    navigation.navigate('ProductGroup');
+  };
+
+  const navigateToAdminDashboard = () => {
+    navigation.navigate('AdminDashboard');
+  };
+
+  const navigateToAddProduct = () => {
+    navigation.navigate('AddProduct');
   };
 
   const getGroupIcon = (groupName) => {
@@ -146,15 +162,15 @@ const HomeScreen = ({ navigation }) => {
           <View style={styles.titleContainer}>
             <Text style={styles.appName}>Stock Manager</Text>
             <Text style={styles.welcomeText}>Welcome, {currentUser?.email?.split('@')[0] || 'User'}</Text>
-            {currentUser?.role === 'admin' && (
+            {isAdmin && (
               <Text style={styles.roleIndicator}>ADMIN</Text>
             )}
           </View>
           <View style={styles.headerActions}>
-            {currentUser?.role === 'admin' && (
+            {isAdmin && (
               <TouchableOpacity 
                 style={styles.adminButton}
-                onPress={() => navigation.navigate('AdminDashboard')}
+                onPress={navigateToAdminDashboard}
               >
                 <Icon name="admin-panel-settings" size={24} color="#fff" />
               </TouchableOpacity>
@@ -186,6 +202,27 @@ const HomeScreen = ({ navigation }) => {
           </View>
         </View>
 
+        {/* Admin Actions */}
+        {isAdmin && (
+          <View style={styles.adminActionsContainer}>
+            <Text style={styles.adminActionsTitle}>Admin Actions</Text>
+            <View style={styles.adminButtonsRow}>
+              <TouchableOpacity style={styles.adminActionButton} onPress={navigateToAdminDashboard}>
+                <Icon name="people" size={24} color="#4a80f5" />
+                <Text style={styles.adminActionText}>Manage Users</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.adminActionButton} onPress={() => navigation.navigate('ProductGroup')}>
+                <Icon name="category" size={24} color="#4a80f5" />
+                <Text style={styles.adminActionText}>Categories</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.adminActionButton} onPress={navigateToAddProduct}>
+                <Icon name="add-box" size={24} color="#4a80f5" />
+                <Text style={styles.adminActionText}>Add Product</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
         {/* Main Content */}
         <View style={styles.content}>
           <View style={styles.sectionHeader}>
@@ -207,7 +244,7 @@ const HomeScreen = ({ navigation }) => {
                 <Text style={styles.emptyDescription}>
                   Start by creating your first product category to organize your inventory
                 </Text>
-                {currentUser?.role === 'admin' && (
+                {isAdmin && (
                   <TouchableOpacity 
                     style={styles.createButton}
                     onPress={() => navigation.navigate('ProductGroup')}
@@ -240,7 +277,7 @@ const HomeScreen = ({ navigation }) => {
           )}
 
           {/* Floating Action Button */}
-          {currentUser?.role === 'admin' && (
+          {isAdmin && (
             <TouchableOpacity 
               style={styles.fab}
               onPress={() => navigation.navigate('ProductGroup')}
@@ -474,6 +511,29 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  adminActionsContainer: {
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 16,
+  },
+  adminActionsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2E3A59',
+    marginBottom: 12,
+  },
+  adminButtonsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  adminActionButton: {
+    alignItems: 'center',
+  },
+  adminActionText: {
+    fontSize: 12,
+    color: '#8E92BC',
+    marginTop: 4,
   },
 });
 

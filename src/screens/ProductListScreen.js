@@ -2,10 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, FlatList, TouchableOpacity, Alert, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialIcons';
-import LinearGradient from 'react-native-linear-gradient';
-import auth from '@react-native-firebase/auth';
-import firestore from '@react-native-firebase/firestore';
 import { subscribeToProducts } from '../services/firebaseService';
+import { useAuth } from '../context/AuthContext';
 
 const ProductListScreen = ({ route, navigation }) => {
   const { groupId, groupName } = route.params;
@@ -13,6 +11,9 @@ const ProductListScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [currentUser, setCurrentUser] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false); // State to track admin role
+
+  const { user } = useAuth(); // Get user from AuthContext
 
   useEffect(() => {
     // Get current user info
@@ -26,6 +27,11 @@ const ProductListScreen = ({ route, navigation }) => {
               email: user.email,
               ...userDoc.data(),
             });
+            // Check admin role once user data is available
+            const result = await checkUserRole(user.uid);
+            if (result.success) {
+              setIsAdmin(result.role === 'admin');
+            }
           }
         } catch (error) {
           console.error('Error fetching user data:', error);
@@ -43,7 +49,48 @@ const ProductListScreen = ({ route, navigation }) => {
       unsubscribeAuth();
       unsubscribe();
     };
-  }, [groupId]);
+  }, [groupId, user]); // Depend on user to re-check role if auth state changes
+
+  // Function to check user role
+  const checkUserRole = async (userId) => {
+    try {
+      const userDoc = await firestore().collection('users').doc(userId).get();
+      if (userDoc.exists()) {
+        return { success: true, role: userDoc.data().role };
+      }
+      return { success: false, role: null };
+    } catch (error) {
+      console.error('Error checking user role:', error);
+      return { success: false, role: null };
+    }
+  };
+
+  const handleDeleteProduct = async (productId) => {
+    Alert.alert(
+      'Delete Product',
+      'Are you sure you want to delete this product?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              await deleteProduct(productId);
+              setProducts(products.filter(p => p.id !== productId));
+              Alert.alert('Success', 'Product deleted successfully!');
+            } catch (error) {
+              console.error('Error deleting product:', error);
+              Alert.alert('Error', 'Failed to delete product. Please try again.');
+            } finally {
+              setLoading(false);
+            }
+          },
+          style: 'destructive',
+        },
+      ]
+    );
+  };
 
   const getStockStatus = (stock) => {
     if (stock === 0) return { color: '#EF4444', text: 'Out of Stock', icon: 'error', bgColor: '#FEF2F2' };
@@ -110,23 +157,29 @@ const ProductListScreen = ({ route, navigation }) => {
             </View>
           </View>
 
-          {/* Action Button */}
-          {currentUser?.role === 'admin' && (
-            <TouchableOpacity 
-              style={styles.updateButton}
-              onPress={() => navigation.navigate('StockUpdate', { productId: item.id, productName: item.name })}
-            >
-              <LinearGradient
-                colors={['#4F46E5', '#7C3AED']}
-                style={styles.updateButtonGradient}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-              >
-                <Icon name="edit" size={14} color="#fff" />
-                <Text style={styles.updateButtonText}>Update</Text>
-              </LinearGradient>
-            </TouchableOpacity>
-          )}
+          {/* Admin Actions */}
+          <View style={styles.productActions}>
+            {isAdmin && (
+              <>
+                <TouchableOpacity 
+                  style={styles.updateStockButton}
+                  onPress={() => navigation.navigate('StockUpdate', { 
+                    productId: item.id, 
+                    productName: item.name,
+                    currentStock: item.stock 
+                  })}
+                >
+                  <Icon name="update" size={16} color="#fff" />
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={styles.deleteButton}
+                  onPress={() => handleDeleteProduct(item.id)}
+                >
+                  <Icon name="delete" size={16} color="#fff" />
+                </TouchableOpacity>
+              </>
+            )}
+          </View>
         </View>
       </TouchableOpacity>
     );
@@ -138,14 +191,26 @@ const ProductListScreen = ({ route, navigation }) => {
 
         {/* Professional Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
             <Icon name="arrow-back" size={24} color="#2E3A59" />
           </TouchableOpacity>
           <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>{groupName}</Text>
             <Text style={styles.headerSubtitle}>{products.length} products</Text>
           </View>
-          <View style={styles.headerSpacer} />
+          {isAdmin ? (
+            <TouchableOpacity 
+              style={styles.addButton}
+              onPress={() => navigation.navigate('AddProduct', { groupId, groupName })}
+            >
+              <Icon name="add" size={24} color="#4a80f5" />
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.placeholder} />
+          )}
         </View>
 
         {/* Content */}
@@ -165,7 +230,7 @@ const ProductListScreen = ({ route, navigation }) => {
                 <Text style={styles.emptyDescription}>
                   Add your first product to get started with inventory management
                 </Text>
-                {currentUser?.role === 'admin' && (
+                {isAdmin && (
                   <TouchableOpacity 
                     style={styles.addFirstButton}
                     onPress={() => navigation.navigate('AddProduct', { groupId, groupName })}
@@ -193,13 +258,20 @@ const ProductListScreen = ({ route, navigation }) => {
             />
           )}
 
-          {/* Floating Action Button */}
-          {currentUser?.role === 'admin' && (
+          {/* Floating Action Button (Add Product) - Visible only for Admin */}
+          {isAdmin && (
             <TouchableOpacity 
               style={styles.fab}
               onPress={() => navigation.navigate('AddProduct', { groupId, groupName })}
             >
-              <Icon name="add" size={24} color="#fff" />
+              <LinearGradient
+                colors={['#4F46E5', '#7C3AED']}
+                style={styles.fabGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+              >
+                <Icon name="add" size={24} color="#fff" />
+              </LinearGradient>
             </TouchableOpacity>
           )}
         </View>
@@ -342,22 +414,22 @@ const styles = StyleSheet.create({
     color: '#8E92BC',
     marginLeft: 4,
   },
-  updateButton: {
-    alignSelf: 'flex-end',
-    borderRadius: 12,
-    overflow: 'hidden',
-  },
-  updateButtonGradient: {
+  productActions: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    justifyContent: 'flex-end',
+    marginTop: 8,
   },
-  updateButtonText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '600',
-    marginLeft: 4,
+  updateStockButton: {
+    backgroundColor: '#4F46E5',
+    padding: 8,
+    borderRadius: 8,
+    marginLeft: 8,
+  },
+  deleteButton: {
+    backgroundColor: '#EF4444',
+    padding: 8,
+    borderRadius: 8,
+    marginLeft: 8,
   },
   emptyContainer: {
     flex: 1,
@@ -434,6 +506,13 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  addButton: {
+    padding: 8,
+  },
+  placeholder: {
+    width: 40,
+    height: 40,
   },
 });
 
