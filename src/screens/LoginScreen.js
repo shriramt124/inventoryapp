@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,46 +13,24 @@ const LoginScreen = ({ navigation }) => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [loginType, setLoginType] = useState('user'); // 'admin' or 'user'
 
   useEffect(() => {
     GoogleSignin.configure({
-      webClientId: '666062081284-gra8sgmg1em9uuletstafh2hr4snlshv.apps.googleusercontent.com', // From Firebase Console
-      offlineAccess:true,
-      scopes:['profile','email'],
+      webClientId: '666062081284-gra8sgmg1em9uuletstafh2hr4snlshv.apps.googleusercontent.com',
+      offlineAccess: true,
+      scopes: ['profile', 'email'],
     });
+
+    // Setup admin on app start
+    setupAdminIfNeeded();
   }, []);
 
-  const handleLogin = async () => {
-    if (email === '' || password === '') {
-      Alert.alert('Error', 'Please enter email and password');
-      return;
-    }
-
-    setLoading(true);
-    
+  const setupAdminIfNeeded = async () => {
     try {
-      await auth().signInWithEmailAndPassword(email, password);
-      navigation.replace('Home');
+      await createInitialAdmin();
     } catch (error) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleAdminSetup = async () => {
-    setLoading(true);
-    try {
-      const result = await createInitialAdmin();
-      if (result.success) {
-        Alert.alert('Success', 'Admin account has been set up. You can now login with admin credentials.');
-      } else {
-        Alert.alert('Info', result.error || 'Admin account setup failed');
-      }
-    } catch (error) {
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
+      console.log('Admin setup check failed:', error);
     }
   };
 
@@ -61,7 +40,37 @@ const LoginScreen = ({ navigation }) => {
       await auth().signInWithEmailAndPassword('shriramt.124@gmail.com', '198118113Ram@');
       navigation.replace('Home');
     } catch (error) {
-      Alert.alert('Error', 'Admin login failed. Make sure admin account is set up first.');
+      Alert.alert('Error', 'Admin login failed. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUserLogin = async () => {
+    if (email === '' || password === '') {
+      Alert.alert('Error', 'Please enter email and password');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const userCredential = await auth().signInWithEmailAndPassword(email, password);
+      const user = userCredential.user;
+      
+      // Check if user exists in firestore and is not admin
+      const userDoc = await firestore().collection('users').doc(user.uid).get();
+      if (userDoc.exists) {
+        const userData = userDoc.data();
+        if (userData.role === 'admin') {
+          await auth().signOut();
+          Alert.alert('Error', 'Admin users should use "Login as Admin" option');
+          return;
+        }
+      }
+      
+      navigation.replace('Home');
+    } catch (error) {
+      Alert.alert('Error', 'User login failed. Please check your credentials or contact admin.');
     } finally {
       setLoading(false);
     }
@@ -71,33 +80,22 @@ const LoginScreen = ({ navigation }) => {
     setGoogleLoading(true);
     
     try {
-      // Check if your device supports Google Play
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
-      
-      // Get the users ID token
       const { idToken } = await GoogleSignin.signIn();
-      
-      // Create a Google credential with the token
       const googleCredential = auth.GoogleAuthProvider.credential(idToken);
-      
-      // Sign-in the user with the credential
       const userCredential = await auth().signInWithCredential(googleCredential);
       const user = userCredential.user;
       
-      // Check if user document exists, if not create one
+      // Check if user document exists, if not create one as regular user
       const userDoc = await firestore().collection('users').doc(user.uid).get();
       
       if (!userDoc.exists) {
-        // Check if this is the first user (make them admin)
-        const usersSnapshot = await firestore().collection('users').get();
-        const isFirstUser = usersSnapshot.empty;
-        
         await firestore().collection('users').doc(user.uid).set({
           name: user.displayName || '',
           email: user.email,
           photoURL: user.photoURL || '',
           provider: 'google',
-          role: isFirstUser ? 'admin' : 'user', // First user becomes admin
+          role: 'user', // Always create as regular user
           createdAt: new Date().toISOString(),
         });
       }
@@ -122,80 +120,113 @@ const LoginScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <View style={styles.formContainer}>
         <Text style={styles.title}>Stock Management</Text>
-        <Text style={styles.subtitle}>Login to your account</Text>
+        <Text style={styles.subtitle}>Choose your login method</Text>
         
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#999"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-        />
-        
-        <TextInput
-          style={styles.input}
-          placeholder="Password"
-          placeholderTextColor="#999"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-        
-        <TouchableOpacity 
-          style={styles.button}
-          onPress={handleLogin}
-          disabled={loading}
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Login</Text>
-          )}
-        </TouchableOpacity>
-
-        <View style={styles.divider}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>OR</Text>
-          <View style={styles.dividerLine} />
-        </View>
-
-        <TouchableOpacity 
-          style={styles.googleButton}
-          onPress={handleGoogleSignIn}
-          disabled={googleLoading}
-        >
-          {googleLoading ? (
-            <ActivityIndicator color="#4285F4" />
-          ) : (
-            <>
-              <Icon name="google" size={20} color="#4285F4" style={styles.googleIcon} />
-              <Text style={styles.googleButtonText}>Sign in with Google</Text>
-            </>
-          )}
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          style={styles.adminSetupButton}
-          onPress={handleAdminSetup}
-        >
-          <Text style={styles.adminSetupText}>Setup Admin Account</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity 
-          style={styles.adminLoginButton}
-          onPress={handleAdminLogin}
-        >
-          <Text style={styles.adminLoginText}>Quick Admin Login</Text>
-        </TouchableOpacity>
-
-        <View style={styles.registerContainer}>
-          <Text style={styles.registerText}>Don't have an account? </Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-            <Text style={styles.registerLink}>Register</Text>
+        {/* Login Type Selector */}
+        <View style={styles.loginTypeContainer}>
+          <TouchableOpacity 
+            style={[styles.loginTypeButton, loginType === 'admin' && styles.activeLoginType]}
+            onPress={() => setLoginType('admin')}
+          >
+            <Icon name="admin-panel-settings" size={20} color={loginType === 'admin' ? '#fff' : '#4a80f5'} />
+            <Text style={[styles.loginTypeText, loginType === 'admin' && styles.activeLoginTypeText]}>
+              Login as Admin
+            </Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.loginTypeButton, loginType === 'user' && styles.activeLoginType]}
+            onPress={() => setLoginType('user')}
+          >
+            <Icon name="person" size={20} color={loginType === 'user' ? '#fff' : '#4a80f5'} />
+            <Text style={[styles.loginTypeText, loginType === 'user' && styles.activeLoginTypeText]}>
+              Login as User
+            </Text>
           </TouchableOpacity>
         </View>
+
+        {loginType === 'admin' ? (
+          <View style={styles.adminLoginContainer}>
+            <Text style={styles.adminLoginText}>
+              Admin credentials are pre-configured. Click below to login as administrator.
+            </Text>
+            <TouchableOpacity 
+              style={styles.adminButton}
+              onPress={handleAdminLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Icon name="admin-panel-settings" size={20} color="#fff" style={styles.buttonIcon} />
+                  <Text style={styles.buttonText}>Login as Admin</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.userLoginContainer}>
+            <TextInput
+              style={styles.input}
+              placeholder="Email"
+              placeholderTextColor="#999"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+            />
+            
+            <TextInput
+              style={styles.input}
+              placeholder="Password"
+              placeholderTextColor="#999"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+            />
+            
+            <TouchableOpacity 
+              style={styles.button}
+              onPress={handleUserLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Icon name="person" size={20} color="#fff" style={styles.buttonIcon} />
+                  <Text style={styles.buttonText}>Login as User</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <View style={styles.divider}>
+              <View style={styles.dividerLine} />
+              <Text style={styles.dividerText}>OR</Text>
+              <View style={styles.dividerLine} />
+            </View>
+
+            <TouchableOpacity 
+              style={styles.googleButton}
+              onPress={handleGoogleSignIn}
+              disabled={googleLoading}
+            >
+              {googleLoading ? (
+                <ActivityIndicator color="#4285F4" />
+              ) : (
+                <>
+                  <Icon name="google" size={20} color="#4285F4" style={styles.googleIcon} />
+                  <Text style={styles.googleButtonText}>Sign in with Google</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.contactAdminText}>
+              Don't have an account? Contact admin to create one for you.
+            </Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -224,6 +255,56 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     textAlign: 'center',
   },
+  loginTypeContainer: {
+    flexDirection: 'row',
+    marginBottom: 30,
+    backgroundColor: '#e9ecef',
+    borderRadius: 8,
+    padding: 4,
+  },
+  loginTypeButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 6,
+    marginHorizontal: 2,
+  },
+  activeLoginType: {
+    backgroundColor: '#4a80f5',
+  },
+  loginTypeText: {
+    marginLeft: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#4a80f5',
+  },
+  activeLoginTypeText: {
+    color: '#fff',
+  },
+  adminLoginContainer: {
+    alignItems: 'center',
+  },
+  adminLoginText: {
+    textAlign: 'center',
+    color: '#666',
+    marginBottom: 20,
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  adminButton: {
+    backgroundColor: '#e74c3c',
+    borderRadius: 8,
+    padding: 15,
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  userLoginContainer: {
+    // No additional styles needed
+  },
   input: {
     backgroundColor: '#fff',
     borderRadius: 8,
@@ -238,24 +319,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 15,
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
     marginTop: 10,
+  },
+  buttonIcon: {
+    marginRight: 8,
   },
   buttonText: {
     color: '#fff',
     fontWeight: 'bold',
     fontSize: 16,
-  },
-  registerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    marginTop: 20,
-  },
-  registerText: {
-    color: '#666',
-  },
-  registerLink: {
-    color: '#4a80f5',
-    fontWeight: 'bold',
   },
   divider: {
     flexDirection: 'row',
@@ -281,7 +355,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     borderWidth: 1,
     borderColor: '#ddd',
-    marginBottom: 10,
+    marginBottom: 20,
   },
   googleIcon: {
     marginRight: 10,
@@ -291,29 +365,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     fontSize: 16,
   },
-  adminSetupButton: {
-    backgroundColor: '#e74c3c',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  adminSetupText: {
-    color: '#fff',
-    fontWeight: '600',
+  contactAdminText: {
+    textAlign: 'center',
+    color: '#666',
     fontSize: 14,
-  },
-  adminLoginButton: {
-    backgroundColor: '#f39c12',
-    borderRadius: 8,
-    padding: 12,
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  adminLoginText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
+    fontStyle: 'italic',
   },
 });
 

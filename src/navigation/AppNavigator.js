@@ -1,10 +1,10 @@
+
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Import screens
 import LoginScreen from '../screens/LoginScreen';
-import RegisterScreen from '../screens/RegisterScreen';
 import HomeScreen from '../screens/HomeScreen';
 import ProductGroupScreen from '../screens/ProductGroupScreen';
 import ProductListScreen from '../screens/ProductListScreen';
@@ -12,8 +12,8 @@ import ProductDetailScreen from '../screens/ProductDetailScreen';
 import AddProductScreen from '../screens/AddProductScreen';
 import StockUpdateScreen from '../screens/StockUpdateScreen';
 import StockHistoryScreen from '../screens/StockHistoryScreen';
-import AdminDashboardScreen from '../screens/AdminDashboardScreen'; // Assuming this screen will be created
-import CreateUserScreen from '../screens/CreateUserScreen'; // Assuming this screen will be created
+import AdminDashboardScreen from '../screens/AdminDashboardScreen';
+import CreateUserScreen from '../screens/CreateUserScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,11 +24,6 @@ const AppNavigator = () => {
         <Stack.Screen 
           name="Login" 
           component={LoginScreen} 
-          options={{ headerShown: false }}
-        />
-        <Stack.Screen 
-          name="Register" 
-          component={RegisterScreen} 
           options={{ headerShown: false }}
         />
         <Stack.Screen 
@@ -66,8 +61,16 @@ const AppNavigator = () => {
           component={StockHistoryScreen} 
           options={{ headerShown: true, title: 'Stock History' }}
         />
-        <Stack.Screen name="AdminDashboard" component={AdminDashboardScreen} />
-        <Stack.Screen name="CreateUser" component={CreateUserScreen} />
+        <Stack.Screen 
+          name="AdminDashboard" 
+          component={AdminDashboardScreen} 
+          options={{ headerShown: true, title: 'Admin Dashboard' }}
+        />
+        <Stack.Screen 
+          name="CreateUser" 
+          component={CreateUserScreen} 
+          options={{ headerShown: true, title: 'Create User' }}
+        />
       </Stack.Navigator>
     </NavigationContainer>
   );
