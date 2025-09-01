@@ -1,10 +1,9 @@
-import React, { useEffect } from 'react';
+
+import React from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import 'react-native-gesture-handler';
 import AppNavigator from './src/navigation/AppNavigator';
 import { AuthProvider } from './src/context/AuthContext';
-
-// Import Firebase configuration
-import { firebase } from './src/config/firebase';
 
 const App = () => {
   return (

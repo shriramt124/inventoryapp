@@ -1,68 +1,96 @@
-import React, { createContext, useState, useEffect, useContext } from 'react';
+
+import React, { createContext, useState, useEffect } from 'react';
 import auth from '@react-native-firebase/auth';
 import firestore from '@react-native-firebase/firestore';
 
-// Create the context
-const AuthContext = createContext();
+export const AuthContext = createContext();
 
-// Provider component
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(null);
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
   const [loading, setLoading] = useState(true);
-  const db = firestore();
 
   useEffect(() => {
-    // Subscribe to auth state changes
-    const unsubscribe = auth().onAuthStateChanged(async (user) => {
-      if (user) {
-        // User is signed in
+    const unsubscribe = auth().onAuthStateChanged(async (authUser) => {
+      if (authUser) {
+        setUser(authUser);
+        
+        // Get user role from Firestore
         try {
-          // Get additional user data from Firestore
-          const userDoc = await db.collection('users').doc(user.uid).get();
-          if (userDoc.exists()) {
-            setCurrentUser({
-              uid: user.uid,
-              email: user.email,
-              ...userDoc.data(),
-            });
+          const userDoc = await firestore()
+            .collection('users')
+            .doc(authUser.uid)
+            .get();
+          
+          if (userDoc.exists) {
+            const userData = userDoc.data();
+            setUserRole(userData.role || 'user');
           } else {
-            setCurrentUser({
-              uid: user.uid,
-              email: user.email,
-              role: 'user', // Default role
-            });
+            setUserRole('user');
           }
         } catch (error) {
-          console.error('Error fetching user data:', error);
-          setCurrentUser({
-            uid: user.uid,
-            email: user.email,
-          });
+          console.error('Error fetching user role:', error);
+          setUserRole('user');
         }
       } else {
-        // User is signed out
-        setCurrentUser(null);
+        setUser(null);
+        setUserRole(null);
       }
       setLoading(false);
     });
 
-    // Cleanup subscription
-    return () => unsubscribe();
+    return unsubscribe;
   }, []);
 
+  const signIn = async (email, password) => {
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const signUp = async (email, password, additionalData = {}) => {
+    try {
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
+      
+      // Create user document in Firestore
+      await firestore()
+        .collection('users')
+        .doc(userCredential.user.uid)
+        .set({
+          email,
+          role: additionalData.role || 'user',
+          createdAt: firestore.FieldValue.serverTimestamp(),
+          ...additionalData,
+        });
+      
+      return userCredential;
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      await auth().signOut();
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const value = {
-    currentUser,
+    user,
+    userRole,
     loading,
+    signIn,
+    signUp,
+    signOut,
   };
 
   return (
     <AuthContext.Provider value={value}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
-};
-
-// Custom hook to use the auth context
-export const useAuth = () => {
-  return useContext(AuthContext);
 };
